@@ -54,6 +54,22 @@ class SVD:
             return 1
         return ans
 
+    def pred2(self,uid,mid,gamma):
+        self.bi.setdefault(mid,0)
+        self.bu.setdefault(uid,0)
+        self.qi.setdefault(mid,np.zeros((self.k,1)))
+        self.pu.setdefault(uid,np.zeros((self.k,1)))
+        if (self.qi[mid] is None):
+            self.qi[mid]=np.zeros((self.k,1))
+        if (self.pu[uid] is None):
+            self.pu[uid]=np.zeros((self.k,1))
+        ans=self.ave+self.bi[mid]+self.bu[uid]+np.sum((self.qi[mid]+gamma)*(self.pu[uid]+gamma))
+        if ans>5:
+            return 5
+        elif ans<1:
+            return 1
+        return ans
+
     # SGD
     # 特点：
     #	1. 一般能够收敛到全局最优（凸目标函数）或局部最优（非凸目标函数），但存在收敛到马鞍点的问题
@@ -91,15 +107,15 @@ class SVD:
         plot(iter_rmse[:,0],iter_rmse[:,1])
         show()
 
-    # SGD - train3
+    # SGD
     #   1. 一遍SGD的情况，
     #   2. 引入了学习速率衰减因子
     def sgd2(self,steps=20,gamma=0.04,Lambda=0.15,decay=300,decay_enable=True):
         print "the train data size is: %d" % self.X.shape[0]
         start_time = time.time()
         gamma_init = gamma
-        iter_rmse = np.zeros((self.X.shape[0], 2))
         rmse_sum=0.0
+        rmse_lst=[]
         kk=np.random.permutation(self.X.shape[0]) # avoid locality
         for j in range(self.X.shape[0]):	# rmse 0.985
             # print "gamma: ",gamma
@@ -115,13 +131,20 @@ class SVD:
             temp=self.qi[mid]
             self.qi[mid]+=gamma*(eui*self.pu[uid]-Lambda*self.qi[mid])
             self.pu[uid]+=gamma*(eui*temp-Lambda*self.pu[uid])
-            iter_rmse[j] = [j, np.sqrt(rmse_sum/(j+1))]
             if decay_enable:
                 gamma=gamma_init*np.sqrt(decay/(decay+j))
+            if j%1000 == 0:
+                rmse = np.sqrt(rmse_sum/(j+1))
+                rmse_lst.append(rmse)
+                print "the rmse of this step %d-th on train data is %f" % (j, rmse)
         end_time = time.time()
         print "time cost: %f" % (end_time-start_time)
         print "the rmse of this step on train data is ",np.sqrt(rmse_sum/self.X.shape[0])
-        plot(iter_rmse[:,0],iter_rmse[:,1])
+        print "bi: ",self.bi
+        print "bu: ",self.bu
+        print "qi: ",self.qi
+        print "pu: ",self.pu
+        plot(range(len(rmse_lst)), rmse_lst)
         show()
 
     # BGD
@@ -162,6 +185,61 @@ class SVD:
         print "time cost: %f" % (end_time-start_time)
         plot(range(len(rmse_lst)), rmse_lst)
         show()
+
+    # 每次Mini-batch后使用累计平均权重作为模型权重
+    def mbgd2(self,steps=20,gamma=0.04,Lambda=0.15,batch_size=64,decay_a=10,decay_enable=False):
+        print "the train data size is: %d" % self.X.shape[0]
+        start_time = time.time()
+        rmse_lst = []
+        gamma_init = gamma
+        count = 0
+        bi_sum = {}
+        bu_sum = {}
+        qi_sum = {}
+        pu_sum = {}
+        for step in range(steps):
+            np.random.shuffle(self.X)
+            rmse = 0.0
+            for batch in self.get_batches(self.X, batch_size=batch_size):
+                rmse += self.batch_gd_update_once(batch, gamma, Lambda)
+                if count%10000 == 0:
+                    print "rmse: ",rmse
+                count += 1
+                bi_sum = self.add_mul_dict_1d(bi_sum, self.bi)
+                bu_sum = self.add_mul_dict_1d(bu_sum, self.bu)
+                qi_sum = self.add_mul_dict_1d(qi_sum, self.qi)
+                pu_sum = self.add_mul_dict_1d(pu_sum, self.pu)
+            rmse = np.sqrt(rmse/self.X.shape[0])
+            rmse_lst.append(rmse)
+            print "the rmse of this step %d-th on train data is %f" % (step, rmse)
+            if decay_enable:
+                # gamma *= 0.93
+                gamma = gamma_init*np.sqrt(decay_a/(decay_a+step))
+        self.bi = self.add_mul_dict_1d({}, bi_sum, 1.0/count)
+        self.bu = self.add_mul_dict_1d({}, bu_sum, 1.0/count)
+        self.qi = self.add_mul_dict_1d({}, qi_sum, 1.0/count)
+        self.pu = self.add_mul_dict_1d({}, pu_sum, 1.0/count)
+        end_time = time.time()
+        print "time cost: %f" % (end_time-start_time)
+        plot(range(len(rmse_lst)), rmse_lst)
+        show()
+
+    # 一维dict相加
+    def add_mul_dict_1d(self, a1, a2, mul=1.0):
+        res = {}
+        for k in a2:
+            res[k] = mul*(a2[k]+(0 if k not in a1 else a1[k]))
+        return res
+
+    # 二维dict相加
+    def add_mul_dict_2d(self, a1, a2, mul=1.0):
+        res = {}
+        for k1 in a2:
+            if k1 not in res:
+                res[k1] = 0
+            for k2 in a2[k1]:
+                res[k1][k2] = mul*(a2[k1][k2]+(0 if (k1 not in a1 or k2 not in a1[k1]) else a1[k1][k2]))
+        return res
 
     # 批量样本生成器
     def get_batches(self, X, batch_size=100):
@@ -327,11 +405,224 @@ class SVD:
     # 优点：
     #   1. 只需要扫描一遍数据集就可以收敛到最优点
     #   2. 更容易求得稀疏解
-    def ftrl(self):
+    def ftrl(self,alpha=1.0,beta=1.0,lambda1=1.0,lambda2=1.0):
+        print "the train data size is: %d" % self.X.shape[0]
         start_time = time.time()
-        pass
+        np.random.shuffle(self.X)
+        z_bi = {}
+        n_bi = {}
+        z_bu = {}
+        n_bu = {}
+        z_qi = {}
+        n_qi = {}
+        z_pu = {}
+        n_pu = {}
+        rmse_sum = 0
+        rmse_lst = []
+        for t in xrange(self.X.shape[0]):
+            uid = self.X[t][0]
+            mid = self.X[t][1]
+            rat = self.X[t][2]
+            # 更新bi
+            z_bi.setdefault(mid, 0)
+            n_bi.setdefault(mid, 0)
+            self.bi[mid] = self.update_param(z_bi[mid],n_bi[mid],alpha,beta,lambda1,lambda2)
+            # 更新bu
+            z_bu.setdefault(uid, 0)
+            n_bu.setdefault(uid, 0)
+            self.bu[uid] = self.update_param(z_bu[uid],n_bu[uid],alpha,beta,lambda1,lambda2)
+            # 更新qi
+            z_qi.setdefault(mid, np.zeros((self.k,1)))
+            # z_qi.setdefault(mid, np.random.random((self.k,1))/np.sqrt(self.k))
+            n_qi.setdefault(mid, np.zeros((self.k,1)))
+            self.qi[mid] = self.update_param(z_qi[mid],n_qi[mid],alpha,beta,lambda1,lambda2)
+            # 更新pu
+            z_pu.setdefault(uid, np.zeros((self.k,1)))
+            # z_pu.setdefault(uid, np.random.random((self.k,1))/np.sqrt(self.k))
+            n_pu.setdefault(uid, np.zeros((self.k,1)))
+            self.pu[uid] = self.update_param(z_pu[uid],n_pu[uid],alpha,beta,lambda1,lambda2)
+            # 预测
+            eui = self.pred(uid,mid)-rat
+            rmse_sum += eui**2
+            if t%1000 == 0:
+                rmse = np.sqrt(rmse_sum/(t+1))
+                rmse_lst.append(rmse)
+                print "the rmse of this step %d-th on train data is %f" % (t, rmse)
+            # 更新z_bi,n_bi
+            g_bi = eui
+            z_bi[mid],n_bi[mid] = self.update_z_n(g_bi,z_bi[mid],n_bi[mid],self.bi[mid],alpha)
+            # 更新z_bu,n_bu
+            g_bu = eui
+            z_bu[uid],n_bu[uid] = self.update_z_n(g_bu,z_bu[uid],n_bu[uid],self.bu[uid],alpha)
+            # 更新z_qi,n_qi
+            qi_tmp = self.qi[mid]
+            g_qi = eui*(self.pu[uid])
+            z_qi[mid],n_qi[mid] = self.update_z_n(g_qi,z_qi[mid],n_qi[mid],self.qi[mid],alpha)
+            # 更新z_pu,n_pu
+            g_pu = eui*(qi_tmp)
+            z_pu[uid],n_pu[uid] = self.update_z_n(g_pu,z_pu[uid],n_pu[uid],self.pu[uid],alpha)
         end_time = time.time()
         print "time cost: %f" % (end_time-start_time)
+        # print "bi: ",self.bi
+        # print "bu: ",self.bu
+        # print "qi: ",self.qi
+        # print "pu: ",self.pu
+        plot(range(len(rmse_lst)), rmse_lst)
+        show()
+
+    def ftrl2(self,alpha=1.0,beta=1.0,lambda1=1.0,lambda2=1.0,gamma=0.0):
+        print "the train data size is: %d" % self.X.shape[0]
+        start_time = time.time()
+        np.random.shuffle(self.X)
+        z_bi = {}
+        n_bi = {}
+        z_bu = {}
+        n_bu = {}
+        z_qi = {}
+        n_qi = {}
+        z_pu = {}
+        n_pu = {}
+        rmse_sum = 0
+        rmse_lst = []
+        for t in xrange(self.X.shape[0]):
+            uid = self.X[t][0]
+            mid = self.X[t][1]
+            rat = self.X[t][2]
+            # 更新bi
+            z_bi.setdefault(mid, 0)
+            n_bi.setdefault(mid, 0)
+            self.bi[mid] = self.update_param(z_bi[mid],n_bi[mid],alpha,beta,lambda1,lambda2)
+            # 更新bu
+            z_bu.setdefault(uid, 0)
+            n_bu.setdefault(uid, 0)
+            self.bu[uid] = self.update_param(z_bu[uid],n_bu[uid],alpha,beta,lambda1,lambda2)
+            # 更新qi
+            z_qi.setdefault(mid, np.zeros((self.k,1)))
+            n_qi.setdefault(mid, np.zeros((self.k,1)))
+            self.qi[mid] = self.update_param(z_qi[mid],n_qi[mid],alpha,beta,lambda1,lambda2)
+            # 更新pu
+            z_pu.setdefault(uid, np.zeros((self.k,1)))
+            n_pu.setdefault(uid, np.zeros((self.k,1)))
+            self.pu[uid] = self.update_param(z_pu[uid],n_pu[uid],alpha,beta,lambda1,lambda2)
+            # 预测
+            # eui = self.pred(uid,mid)-rat
+            eui = self.pred2(uid,mid,gamma)-rat
+            rmse_sum += eui**2
+            if t%1000 == 0:
+                rmse = np.sqrt(rmse_sum/(t+1))
+                rmse_lst.append(rmse)
+                print "the rmse of this step %d-th on train data is %f" % (t, rmse)
+            # 更新z_bi,n_bi
+            g_bi = eui
+            z_bi[mid],n_bi[mid] = self.update_z_n(g_bi,z_bi[mid],n_bi[mid],self.bi[mid],alpha)
+            # 更新z_bu,n_bu
+            g_bu = eui
+            z_bu[uid],n_bu[uid] = self.update_z_n(g_bu,z_bu[uid],n_bu[uid],self.bu[uid],alpha)
+            # 更新z_qi,n_qi
+            qi_tmp = self.qi[mid]
+            g_qi = eui*(self.pu[uid]+gamma)
+            z_qi[mid],n_qi[mid] = self.update_z_n(g_qi,z_qi[mid],n_qi[mid],self.qi[mid],alpha)
+            # 更新z_pu,n_pu
+            g_pu = eui*(qi_tmp+gamma)
+            z_pu[uid],n_pu[uid] = self.update_z_n(g_pu,z_pu[uid],n_pu[uid],self.pu[uid],alpha)
+        end_time = time.time()
+        print "time cost: %f" % (end_time-start_time)
+        print "bi: ",self.bi
+        print "bu: ",self.bu
+        print "qi: ",self.qi
+        print "pu: ",self.pu
+        plot(range(len(rmse_lst)), rmse_lst)
+        show()
+
+    def ftrl3(self,alpha=1.0,beta=1.0,lambda1=1.0,lambda2=1.0):
+        print "the train data size is: %d" % self.X.shape[0]
+        start_time = time.time()
+        np.random.shuffle(self.X)
+        z_bi = {}
+        n_bi = {}
+        z_bu = {}
+        n_bu = {}
+        z_qi = {}
+        n_qi = {}
+        z_pu = {}
+        n_pu = {}
+        rmse_sum = 0
+        rmse_lst = []
+        for t in xrange(self.X.shape[0]):
+            uid = self.X[t][0]
+            mid = self.X[t][1]
+            rat = self.X[t][2]
+            # 初始化
+            z_bi.setdefault(mid, 0)
+            n_bi.setdefault(mid, 0)
+            z_bu.setdefault(uid, 0)
+            n_bu.setdefault(uid, 0)
+            z_qi.setdefault(mid, np.zeros((self.k,1)))
+            n_qi.setdefault(mid, np.zeros((self.k,1)))
+            z_pu.setdefault(uid, np.zeros((self.k,1)))
+            n_pu.setdefault(uid, np.zeros((self.k,1)))
+            # 预测
+            eui = self.pred(uid,mid)-rat
+            rmse_sum += eui**2
+            if t%1000 == 0:
+                rmse = np.sqrt(rmse_sum/(t+1))
+                rmse_lst.append(rmse)
+                print "the rmse of this step %d-th on train data is %f" % (t, rmse)
+            # 更新z_bi,n_bi
+            g_bi = eui
+            z_bi[mid],n_bi[mid] = self.update_z_n(g_bi,z_bi[mid],n_bi[mid],self.bi[mid],alpha)
+            # 更新z_bu,n_bu
+            g_bu = eui
+            z_bu[uid],n_bu[uid] = self.update_z_n(g_bu,z_bu[uid],n_bu[uid],self.bu[uid],alpha)
+            # 更新z_qi,n_qi
+            qi_tmp = self.qi[mid]
+            g_qi = eui*self.pu[uid]
+            z_qi[mid],n_qi[mid] = self.update_z_n(g_qi,z_qi[mid],n_qi[mid],self.qi[mid],alpha)
+            # 更新z_pu,n_pu
+            g_pu = eui*qi_tmp
+            z_pu[uid],n_pu[uid] = self.update_z_n(g_pu,z_pu[uid],n_pu[uid],self.pu[uid],alpha)
+            # 更新bi
+            self.bi[mid] = self.update_param(z_bi[mid],n_bi[mid],alpha,beta,lambda1,lambda2)
+            # 更新bu
+            self.bu[uid] = self.update_param(z_bu[uid],n_bu[uid],alpha,beta,lambda1,lambda2)
+            # 更新qi
+            self.qi[mid] = self.update_param(z_qi[mid],n_qi[mid],alpha,beta,lambda1,lambda2)
+            # 更新pu
+            self.pu[uid] = self.update_param(z_pu[uid],n_pu[uid],alpha,beta,lambda1,lambda2)
+        end_time = time.time()
+        print "time cost: %f" % (end_time-start_time)
+        print "bi: ",self.bi
+        print "bu: ",self.bu
+        print "qi: ",self.qi
+        print "pu: ",self.pu
+        plot(range(len(rmse_lst)), rmse_lst)
+        show()
+
+    def update_param(self,z,n,alpha,beta,lambda1,lambda2):
+        w = -1.0/((beta+np.sqrt(n))/alpha+lambda2)*(z-np.sign(z)*lambda1)
+        w = w*(abs(z)>lambda1) # w=0 if |z|<=lambda1, for sparsity
+        return w
+
+    def update_z_n(self,grad,z,n,w,alpha):
+        sigma = 1.0/alpha*(np.sqrt(n+grad**2)-np.sqrt(n))
+        z += grad-sigma*w
+        n += grad**2
+        return z,n
+
+    def ftrl_core(self,w,X,alpha,beta,lambda1,lambda2):
+        # self.ftrl_core(self.bi,self.X,alpha,beta,lambda1,lambda2)
+        # self.ftrl_core(self.bu,self.X,alpha,beta,lambda1,lambda2)
+        # self.ftrl_core(self.qi,self.X,alpha,beta,lambda1,lambda2)
+        # self.ftrl_core(self.pu,self.X,alpha,beta,lambda1,lambda2)
+        # z = {}
+        # n = {}
+        # for i in xrange(X.shape[0]):
+        #     uid = X[i][0]
+        #     mid = X[i][1]
+        #     rat = X[i][2]
+        # for k in w:
+        pass
+
 
     # 测试
     def test(self,test_X):
@@ -341,6 +632,20 @@ class SVD:
         print "the test data size is ",test_X.shape
         for i in range(test_X.shape[0]):
             pre=self.pred(test_X[i][0],test_X[i][1])
+            output.append(pre)
+            #print pre,test_X[i][2]
+            sums+=(pre-test_X[i][2])**2
+        rmse=np.sqrt(sums/test_X.shape[0])
+        print "the rmse on test data is ",rmse
+        return output
+
+    def test2(self,test_X,gamma=1.0):
+        output=[]
+        sums=0
+        test_X=np.array(test_X)
+        print "the test data size is ",test_X.shape
+        for i in range(test_X.shape[0]):
+            pre=self.pred2(test_X[i][0],test_X[i][1],gamma)
             output.append(pre)
             #print pre,test_X[i][2]
             sums+=(pre-test_X[i][2])**2

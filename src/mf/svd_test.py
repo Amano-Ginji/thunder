@@ -29,14 +29,15 @@ a = SVD(train_X, 30)
 # a.sgd()
 # a.sgd(200)
 # a.sgd2(200,gamma=0.1)
-# a.sgd2(gamma=0.001,decay_enable=False) # 学习速率较少，收敛慢
-# a.sgd2(gamma=0.01,decay_enable=False) # 学习速率较少，收敛慢
-# a.sgd2(gamma=0.04,decay_enable=False) # 默认学习速率较少
-# a.sgd2(gamma=0.1,decay_enable=False) # 学习速率适中，比默认值收敛到更好的值
+# a.sgd2(gamma=0.001,decay_enable=False) # 学习速率较小，收敛慢
+# a.sgd2(gamma=0.01,decay_enable=False) # 学习速率较小，收敛慢
+a.sgd2(gamma=0.04,decay_enable=False) # 默认学习速率较小，train：1.063, test: 0.987
+# a.sgd2(gamma=0.1,decay_enable=False) # 学习速率适中，比默认值收敛到更好的值，train: 1.046, test: 1.001
 # a.sgd2(gamma=0.1,decay_enable=False) # 学习速率适中，比默认值收敛到更好的值
 # a.sgd2(gamma=0.2,decay_enable=False) # 学习速率过大，快速回弹
 # a.sgd2(gamma=0.3,decay_enable=False) # 学习速率过大，快速回弹
 # a.sgd2(gamma=0.1,decay=1000) # 学习速率适中，比默认值收敛到更好的值
+# a.mbgd(steps=1,gamma=0.04,Lambda=0.15,batch_size=1,decay_a=10) # 模拟online learning的方式，train: 1.064 test: 0.990
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=1,decay_a=10) # train: 0.820 test: 0.934
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=64,decay_a=10) # train: 0.803 test: 0.931
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=256,decay_a=10) # train: 0.747 test: 0.926
@@ -49,6 +50,15 @@ a = SVD(train_X, 30)
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=256,decay_a=1,decay_enable=True) # train: 0.794 test: 0.923
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=1024,decay_a=10) # train: 0.622 test: 0.949
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=80000,decay_a=10) # 等价于全量梯度下降
-a.mbgd_adadelta(steps=20,gamma=0.04,Lambda=0.15,batch_size=256,decay_a=1,decay_enable=True)
+# a.mbgd_adadelta(steps=20,gamma=0.04,Lambda=0.15,batch_size=256,decay_a=1,decay_enable=True)
+# a.mbgd2(steps=1,gamma=0.04,Lambda=0.15,batch_size=1,decay_a=10) # 模拟online learning的方式，train: 1.064 test: 0.990
+# a.ftrl(alpha=0.5,beta=1.0,lambda1=1.0,lambda2=1.0) # train: 0.973, test: 0.968，z=zeros(k,1)，此时学习到的user和item隐式主题向量为0
+# a.ftrl(alpha=1.0,beta=1.0,lambda1=0.0,lambda2=1.0) # train 1.202, test: 1.230，随机初始化z=random()/sqrt(k)，学习速率过大，反弹
+# a.ftrl(alpha=0.5,beta=1.0,lambda1=0.0,lambda2=1.0) # train: 0.980, test: 0.979，随机初始化z=random()/sqrt(k)
+# a.ftrl(alpha=0.1,beta=1.0,lambda1=0.0,lambda2=1.0) # train 0.991, test: 0.980，随机初始化z=random(k,1)/sqrt(k)
+# a.ftrl(alpha=0.05,beta=1.0,lambda1=0.0,lambda2=1.0) # train 1.024, test: 1.018，随机初始化z=random(k,1)/sqrt(k)
+# a.ftrl3(alpha=1.0,beta=1.0,lambda1=1.0,lambda2=1.0)
 a.test(test_X)
 
+# a.ftrl2(alpha=0.5,beta=1.0,lambda1=1.0,lambda2=1.0,gamma=1.0) # test: 0.968
+# a.test2(test_X,gamma=1.0)
