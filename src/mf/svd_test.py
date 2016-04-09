@@ -29,14 +29,30 @@ a = SVD(train_X, 30)
 # a.sgd()
 # a.sgd(200)
 # a.sgd2(200,gamma=0.1)
-# a.sgd2(gamma=0.001,decay_enable=False) # 学习速率较小，收敛慢
-# a.sgd2(gamma=0.01,decay_enable=False) # 学习速率较小，收敛慢
-a.sgd2(gamma=0.04,decay_enable=False) # 默认学习速率较小，train：1.063, test: 0.987
-# a.sgd2(gamma=0.1,decay_enable=False) # 学习速率适中，比默认值收敛到更好的值，train: 1.046, test: 1.001
-# a.sgd2(gamma=0.1,decay_enable=False) # 学习速率适中，比默认值收敛到更好的值
-# a.sgd2(gamma=0.2,decay_enable=False) # 学习速率过大，快速回弹
-# a.sgd2(gamma=0.3,decay_enable=False) # 学习速率过大，快速回弹
+# a.sgd2(gamma=0.001,decay_method=0) # 学习速率较小，收敛慢
+# a.sgd2(gamma=0.01,decay_method=0) # 学习速率较小，收敛慢
+# a.sgd2(gamma=0.04,decay_method=0) # 默认学习速率较小，train：1.063, test: 0.987
+# a.sgd2(gamma=0.1,decay_method=0) # 学习速率适中，比默认值收敛到更好的值，train: 1.046, test: 1.001
+# a.sgd2(gamma=0.1,decay_method=0) # 学习速率适中，比默认值收敛到更好的值
+# a.sgd2(gamma=0.2,decay_method=0) # 学习速率过大，快速回弹
+# a.sgd2(gamma=0.3,decay_method=0) # 学习速率过大，快速回弹
 # a.sgd2(gamma=0.1,decay=1000) # 学习速率适中，比默认值收敛到更好的值
+# a.sgd2(gamma=0.04,decay_method=1) # 自定义自适应学习速率，初始学习速率太小，train：1.258, test: 1.257
+# a.sgd2(gamma=0.08,decay_method=1) # 自定义自适应学习速率，初始学习速率适中，train：1.046, test: 0.991
+# a.sgd2(gamma=0.1,decay_method=1) # 自定义自适应学习速率，初始学习速率适中，train：1.046, test: 0.998
+# a.sgd2(gamma=0.4,decay_method=1) # 自定义自适应学习速率，初始学习速率太大，train：2.339, test: 2.339
+# a.sgd2(gamma=0.004,decay_method=2) # adagrad，初始学习速率太小，train：1.688, test: 1.611
+# a.sgd2(gamma=0.008,decay_method=2) # adagrad，初始学习速率太小，train：1.623, test: 1.542
+# a.sgd2(gamma=0.01,decay_method=2) # adagrad，初始学习速率适中，train：1.557, test: 1.508
+# a.sgd2(gamma=0.012,decay_method=2) # adagrad，初始学习速率太小，train：1.620, test: 1.574
+# a.sgd2(gamma=0.015,decay_method=2) # adagrad，初始学习速率太小，train：1.719, test: 1.745
+# a.sgd2(gamma=0.02,decay_method=2) # adagrad，初始学习速率太大，train：1.856, test: 1.851
+# a.sgd2(gamma=0.04,decay_method=2) # adagrad，初始学习速率太大，train：2.185, test: 2.185
+# a.sgd2(gamma=0.4,decay_method=2) # adagrad，初始学习速率太大，train：2.329, test: 2.341
+# a.sgd2(gamma=0.04,decay_method=3) # adadelta，初始学习速率适中，train：1.063, test: 0.991
+# a.sgd2(gamma=0.08,decay_method=3) # adadelta，初始学习速率适中，train：1.040, test: 0.986
+# a.sgd2(gamma=0.1,decay_method=3) # adadelta，初始学习速率适中，train：1.042, test: 0.999
+# a.sgd2(gamma=0.15,decay_method=3) # adadelta，初始学习速率太大，train：2.163, test: 2.165
 # a.mbgd(steps=1,gamma=0.04,Lambda=0.15,batch_size=1,decay_a=10) # 模拟online learning的方式，train: 1.064 test: 0.990
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=1,decay_a=10) # train: 0.820 test: 0.934
 # a.mbgd(steps=20,gamma=0.04,Lambda=0.15,batch_size=64,decay_a=10) # train: 0.803 test: 0.931

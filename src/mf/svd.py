@@ -109,14 +109,22 @@ class SVD:
 
     # SGD
     #   1. 一遍SGD的情况，
-    #   2. 引入了学习速率衰减因子
-    def sgd2(self,steps=20,gamma=0.04,Lambda=0.15,decay=300,decay_enable=True):
+    #   2. 引入了自适应学习速率
+    #   1) 自定义自适应学习速率：gamma = gamma*sqrt(a/(t+a))，a是衰减因子
+    #   2) adagrad：优点是不存在原生SGD的马鞍点问题，收敛速度慢，常跟downpour sgd搭配使用。trick: gamma的值比原生SGD的最优gamma值大一个量级。实验结果收敛效果并不及固定学习速率的SGD，应该是收敛速度慢的原因，收敛速度慢主要原因应该是对每个w独立的学习速率
+    #   2) adadelta：优点是不存在原生SGD的马鞍点问题，而且收敛速度快于adagrad，而且不需要指定初始学习速率，完全自适应。实验的收敛效果跟SGD相当
+    def sgd2(self,steps=20,gamma=0.04,Lambda=0.15,decay_method=0,decay=300):
         print "the train data size is: %d" % self.X.shape[0]
         start_time = time.time()
         gamma_init = gamma
         rmse_sum=0.0
         rmse_lst=[]
         kk=np.random.permutation(self.X.shape[0]) # avoid locality
+        eps = 1e-8
+        bi_info = {} # (grad_bi,delta_bi,n)
+        bu_info = {} # (grad_bu,delta_bu,n)
+        qi_info = {} # (grad_qi,delta_qi,n)
+        pu_info = {} # (grad_pu,delta_pu,n)
         for j in range(self.X.shape[0]):	# rmse 0.985
             # print "gamma: ",gamma
             i=kk[j]
@@ -126,13 +134,63 @@ class SVD:
             rat=self.X[i][2]
             eui=rat-self.pred(uid,mid)
             rmse_sum+=eui**2
-            self.bu[uid]+=gamma*(eui-Lambda*self.bu[uid])
-            self.bi[mid]+=gamma*(eui-Lambda*self.bi[mid])
-            temp=self.qi[mid]
-            self.qi[mid]+=gamma*(eui*self.pu[uid]-Lambda*self.qi[mid])
-            self.pu[uid]+=gamma*(eui*temp-Lambda*self.pu[uid])
-            if decay_enable:
+            if decay_method == 0: # 固定学习速率
+                self.bi[mid]+=gamma*(eui-Lambda*self.bi[mid])
+                self.bu[uid]+=gamma*(eui-Lambda*self.bu[uid])
+                temp=self.qi[mid]
+                self.qi[mid]+=gamma*(eui*self.pu[uid]-Lambda*self.qi[mid])
+                self.pu[uid]+=gamma*(eui*temp-Lambda*self.pu[uid])
+            elif decay_method == 1: # 自定义自适应学习速率
+                self.bi[mid]+=gamma*(eui-Lambda*self.bi[mid])
+                self.bu[uid]+=gamma*(eui-Lambda*self.bu[uid])
+                temp=self.qi[mid]
+                self.qi[mid]+=gamma*(eui*self.pu[uid]-Lambda*self.qi[mid])
+                self.pu[uid]+=gamma*(eui*temp-Lambda*self.pu[uid])
                 gamma=gamma_init*np.sqrt(decay/(decay+j))
+            elif decay_method == 2: # adagrad
+                gamma_bi = gamma/np.sqrt(bi_info[mid][0] if mid in bi_info and bi_info[mid][0]>0 else 1.0)
+                grad_bi = (eui-Lambda*self.bi[mid])
+                delta_bi = gamma_bi*grad_bi
+                self.bi[mid]+=delta_bi
+                gamma_bu = gamma/np.sqrt(bu_info[uid][0] if uid in bu_info and bu_info[uid][0]>0 else 1.0)
+                grad_bu = (eui-Lambda*self.bu[uid])
+                delta_bu = gamma_bu*grad_bu
+                self.bu[uid]+=delta_bu
+                temp=self.qi[mid]
+                gamma_qi = gamma/np.sqrt(qi_info[mid][0] if mid in qi_info else np.ones((self.k,1)))
+                grad_qi = (eui*self.pu[uid]-Lambda*self.qi[mid])
+                delta_qi = gamma_qi*grad_qi
+                self.qi[mid]+=delta_qi
+                gamma_pu = gamma/np.sqrt(pu_info[uid][0] if uid in pu_info else np.ones((self.k,1)))
+                grad_pu = (eui*temp-Lambda*self.pu[uid])
+                delta_pu = gamma_pu*grad_pu
+                self.pu[uid]+=delta_pu
+                bi_info[mid]=(bi_info[mid] if mid in bi_info else np.array([0,0,0]))+np.array([grad_bi**2,delta_bi**2,1])
+                bu_info[uid]=(bu_info[uid] if uid in bu_info else np.array([0,0,0]))+np.array([grad_bu**2,delta_bu**2,1])
+                qi_info[mid]=(qi_info[mid] if mid in qi_info else np.array([0,0,0]))+np.array([grad_qi**2,delta_qi**2,1])
+                pu_info[uid]=(pu_info[uid] if uid in pu_info else np.array([0,0,0]))+np.array([grad_pu**2,delta_pu**2,1])
+            elif decay_method == 3: # adadelta
+                gamma_bi = np.sqrt(bi_info[mid][1])/np.sqrt(bi_info[mid][0]) if mid in bi_info and bi_info[mid][0]>0 else gamma
+                grad_bi = (eui-Lambda*self.bi[mid])
+                delta_bi = gamma_bi*grad_bi
+                self.bi[mid]+=delta_bi
+                gamma_bu = np.sqrt(bu_info[uid][1])/np.sqrt(bu_info[uid][0]) if uid in bu_info and bu_info[uid][0]>0 else gamma
+                grad_bu = (eui-Lambda*self.bu[uid])
+                delta_bu = gamma_bu*grad_bu
+                self.bu[uid]+=delta_bu
+                temp=self.qi[mid]
+                gamma_qi = np.sqrt(qi_info[mid][1])/np.sqrt(qi_info[mid][0]) if mid in qi_info else gamma*np.ones((self.k,1))
+                grad_qi = (eui*self.pu[uid]-Lambda*self.qi[mid])
+                delta_qi = gamma_qi*grad_qi
+                self.qi[mid]+=delta_qi
+                gamma_pu = np.sqrt(pu_info[uid][1])/np.sqrt(pu_info[uid][0]) if uid in pu_info else gamma*np.ones((self.k,1))
+                grad_pu = (eui*temp-Lambda*self.pu[uid])
+                delta_pu = gamma_pu*grad_pu
+                self.pu[uid]+=delta_pu
+                bi_info[mid]=(bi_info[mid] if mid in bi_info else np.array([0,0,0]))+np.array([grad_bi**2,delta_bi**2,1])
+                bu_info[uid]=(bu_info[uid] if uid in bu_info else np.array([0,0,0]))+np.array([grad_bu**2,delta_bu**2,1])
+                qi_info[mid]=(qi_info[mid] if mid in qi_info else np.array([0,0,0]))+np.array([grad_qi**2,delta_qi**2,1])
+                pu_info[uid]=(pu_info[uid] if uid in pu_info else np.array([0,0,0]))+np.array([grad_pu**2,delta_pu**2,1])
             if j%1000 == 0:
                 rmse = np.sqrt(rmse_sum/(j+1))
                 rmse_lst.append(rmse)
@@ -140,10 +198,10 @@ class SVD:
         end_time = time.time()
         print "time cost: %f" % (end_time-start_time)
         print "the rmse of this step on train data is ",np.sqrt(rmse_sum/self.X.shape[0])
-        print "bi: ",self.bi
-        print "bu: ",self.bu
-        print "qi: ",self.qi
-        print "pu: ",self.pu
+        # print "bi: ",self.bi
+        # print "bu: ",self.bu
+        # print "qi: ",self.qi
+        # print "pu: ",self.pu
         plot(range(len(rmse_lst)), rmse_lst)
         show()
 
@@ -289,7 +347,7 @@ class SVD:
         # return np.sqrt(rmse_sum/batch.shape[0])
         return rmse_sum
 
-    # Mini-batch + Adadelta自适应学习速率 - train7
+    # Mini-batch + Adadelta自适应学习速率
     # Adadelta自适应学习速率优点：
     #   1. 收敛速度快
     #	2. 能够收敛到全局最优（凸目标函数）或局部最优（非凸目标函数），不存在收敛到马鞍点的问题
