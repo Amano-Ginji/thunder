@@ -50,7 +50,7 @@ a = SVD(train_X, 30)
 # a.sgd2(gamma=0.04,decay_method=2) # adagrad，初始学习速率太大，train：2.185, test: 2.185
 # a.sgd2(gamma=0.4,decay_method=2) # adagrad，初始学习速率太大，train：2.329, test: 2.341
 # a.sgd2(gamma=0.04,decay_method=3) # adadelta，初始学习速率适中，train：1.063, test: 0.991
-# a.sgd2(gamma=0.08,decay_method=3) # adadelta，初始学习速率适中，train：1.040, test: 0.986
+ a.sgd2(gamma=0.08,decay_method=3) # adadelta，初始学习速率适中，train：1.040, test: 0.986
 # a.sgd2(gamma=0.1,decay_method=3) # adadelta，初始学习速率适中，train：1.042, test: 0.999
 # a.sgd2(gamma=0.15,decay_method=3) # adadelta，初始学习速率太大，train：2.163, test: 2.165
 # a.mbgd(steps=1,gamma=0.04,Lambda=0.15,batch_size=1,decay_a=10) # 模拟online learning的方式，train: 1.064 test: 0.990
