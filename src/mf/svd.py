@@ -113,6 +113,7 @@ class SVD:
     #   1) 自定义自适应学习速率：gamma = gamma*sqrt(a/(t+a))，a是衰减因子
     #   2) adagrad：优点是不存在原生SGD的马鞍点问题，收敛速度慢，常跟downpour sgd搭配使用。trick: gamma的值比原生SGD的最优gamma值大一个量级。实验结果收敛效果并不及固定学习速率的SGD，应该是收敛速度慢的原因，收敛速度慢主要原因应该是对每个w独立的学习速率
     #   2) adadelta：优点是不存在原生SGD的马鞍点问题，而且收敛速度快于adagrad，而且不需要指定初始学习速率，完全自适应。实验的收敛效果跟SGD相当
+    #   注：adagrad和adadelta按wi独立学习速率的特点有助于并行化
     def sgd2(self,steps=20,gamma=0.04,Lambda=0.15,decay_method=0,decay=300):
         print "the train data size is: %d" % self.X.shape[0]
         start_time = time.time()
@@ -120,7 +121,6 @@ class SVD:
         rmse_sum=0.0
         rmse_lst=[]
         kk=np.random.permutation(self.X.shape[0]) # avoid locality
-        eps = 1e-8
         bi_info = {} # (grad_bi,delta_bi,n)
         bu_info = {} # (grad_bu,delta_bu,n)
         qi_info = {} # (grad_qi,delta_qi,n)
